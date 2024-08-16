@@ -1,0 +1,41 @@
+name: Build and Publish Container
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Version
+        id: version
+        shell: bash
+        run: echo "sqlcmd=$(gh release view -R microsoft/go-sqlcmd --json tagName -q '.tagName')" >> $GITHUB_OUTPUT
+
+      - name: Download sqlcmd ${{ steps.version.outputs.sqlcmd }}
+        shell: bash
+        run: |
+          gh release download ${{ steps.version.outputs.sqlcmd }} --pattern sqlcmd-linux-amd64.tar.bz2 -R microsoft/go-sqlcmd
+          tar -xjvf sqlcmd-linux-amd64.tar.bz2
+
+      - name: "Build and Publish brocksolutions/sqlcmd:${{ steps.version.outputs.sqlcmd }}"
+        uses: brocksolutions/action-build-container@v3
+        with:
+          dockerfile-path: Dockerfile
+          image-name: sqlcmd
+          version: ${{ steps.version.outputs.sqlcmd }}
+          tag-latest: true
+          push-to-registry: true

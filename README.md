@@ -3,8 +3,8 @@
 This repository contains the Dockerfile for the `brocksolutions/sqlcmd` container image. This image provides the latest version of
 Microsoft's `sqlcmd` (Go) tool.
 
-Microsoft does not (yet) distribute an official `sqlcmd` container image, so this image is built by installing the `sqlcmd` tool
-into a base Debian image.
+Microsoft does not currently distribute an official `sqlcmd` container image, so this image simply bundles the `sqlcmd` file into
+a minimal container image.
 
 ## Available Tags
 
@@ -17,5 +17,5 @@ The entrypoint in the container is set to the `/usr/bin/sqlcmd`. This means you 
 the `sqlcmd` tool locally, and simply pass in any additional parameters you amy need.  For example:
 
 ``` powershell
-docker run --rm brocksolutions/sqlcmd -S myserver -U myuser -P mypassword -Q "SELECT @@VERSION"
+docker run --rm brocksolutions/sqlcmd:latest -S myserver -U myuser -P mypassword -Q "SELECT @@VERSION"
 ```
