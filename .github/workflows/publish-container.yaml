@@ -21,12 +21,12 @@ jobs:
       - name: Determine Version
         id: version
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: echo "sqlcmd=$(gh release view -R microsoft/go-sqlcmd --json tagName -q '.tagName')" >> $GITHUB_OUTPUT
 
       - name: Download sqlcmd ${{ steps.version.outputs.sqlcmd }}
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           gh release download ${{ steps.version.outputs.sqlcmd }} --pattern sqlcmd-linux-amd64.tar.bz2 -R microsoft/go-sqlcmd
           tar -xjvf sqlcmd-linux-amd64.tar.bz2
