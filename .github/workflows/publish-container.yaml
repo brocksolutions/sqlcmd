@@ -27,6 +27,8 @@ jobs:
 
       - name: Download sqlcmd ${{ steps.version.outputs.sqlcmd }}
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release download ${{ steps.version.outputs.sqlcmd }} --pattern sqlcmd-linux-amd64.tar.bz2 -R microsoft/go-sqlcmd
           tar -xjvf sqlcmd-linux-amd64.tar.bz2
