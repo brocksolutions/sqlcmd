@@ -1,0 +1,162 @@
+# yamllint disable rule:line-length
+# Repo: brocksolutions/action-build-container
+---
+name: "Build a Docker Container"
+description: "This action builds a Docker container and optionally pushes it to a registry."
+author: "Platform Team"
+
+inputs:
+  dockerfile-path:
+    description: "The path to the Dockerfile in your repository"
+    required: true
+  docker-context:
+    description: "The context for your docker build"
+    required: false
+    default: .
+  enable-cache:
+    description: "Whether or not to enable the docker build cache via GitHub Actions caching"
+    required: false
+    default: "false"
+  organization:
+    description: "The organization name prefix to add to the image name. Optional. Defaults to 'brocksolutions'. "
+    required: false
+    default: "brocksolutions"
+  image-name:
+    description: "The container image name used to tag the image with."
+    required: true
+  tags:
+    description: "Newline separated list of tags to apply to the image"
+    required: false
+    default: ""
+  tag-latest:
+    description: "Whether or not to tag the image as latest."
+    required: false
+    default: "false"
+  push-to-registry:
+    description: "Whether or not to push the image to a registry"
+    required: false
+    default: "false"
+  security-scan:
+    description: "Whether or not to scan the image for vulnerabilities"
+    required: false
+    default: "true"
+  use-ghas:
+    description: "Whether or not Trivy results should be uploaded to GitHub Advanced Security"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Docker Login
+      if: ${{ inputs.push-to-registry }}
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    # Cached Builds require Docker Buildx, and the resulting image needs to be loaded into Docker
+    - name: Set up Docker Buildx
+      if: ${{ inputs.enable-cache == 'true' }}
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker Image (Cached)
+      if: ${{ inputs.enable-cache == 'true' }}
+      id: build-cache
+      uses: docker/build-push-action@v6
+      with:
+        cache-from: type=gha,scope=${{ inputs.image-name }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.image-name }}
+        load: true
+        context: ${{ inputs.docker-context }}
+        file: ${{ inputs.dockerfile-path }}
+        build-args: |
+          GITHUB_ACTOR=${{ github.actor }}
+        secrets: |
+          GITHUB_TOKEN=${{ github.token }}
+        tags: |
+          ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:${{ github.sha }}
+    
+    # Non-Cached Builds can use the standard Docker included in the GitHub Actions runner
+    - name: Build Docker Image (No Cache)
+      if: ${{ inputs.enable-cache != 'true' }}
+      id: build-nocache
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.docker-context }}
+        file: ${{ inputs.dockerfile-path }}
+        build-args: |
+          GITHUB_ACTOR=${{ github.actor }}
+        secrets: |
+          GITHUB_TOKEN=${{ github.token }}
+        tags: |
+          ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:${{ github.sha }}
+
+    # GHAS Trivy Scan - Upload results to GitHub Security tab
+    - name: Scan Docker Image with Trivy
+      if: ${{ inputs.security-scan == 'true' && inputs.use-ghas == 'true' }}
+      uses: aquasecurity/trivy-action@0.33.1
+      env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
+      with:
+        image-ref: ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:${{ github.sha }}
+        format: "sarif"
+        output: "trivy-results.sarif"
+        vuln-type: "os"
+
+    - name: Upload Trivy Results to GHAS
+      uses: github/codeql-action/upload-sarif@v3
+      if: ${{ inputs.security-scan == 'true' && inputs.use-ghas == 'true' }}
+      with:
+        sarif_file: "trivy-results.sarif"
+        category: "container"
+
+    # Non-GHAS Trivy Scan - Upload results to Job Summary
+    - name: Scan Docker Image with Trivy
+      if: ${{ inputs.security-scan == 'true' && inputs.use-ghas != 'true' }}
+      uses: aquasecurity/trivy-action@0.33.1
+      env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
+      with:
+        image-ref: ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:${{ github.sha }}
+        format: "table"
+        output: "trivy-results.txt"
+        vuln-type: "os"
+
+    - name: Publish Trivy Results to Summary
+      if: ${{ inputs.security-scan == 'true' && inputs.use-ghas != 'true' }}
+      shell: bash
+      run: |
+        if [[ -s trivy-results.txt ]]; then
+          {
+            echo "## Trivy Security Output"
+            echo "<details><summary>Click to expand</summary>"
+            echo ""
+            echo '```terraform'
+            cat trivy-results.txt
+            echo '```'
+            echo "</details>"
+          } >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Tag Docker Image
+      if: ${{ inputs.tags != '' }}
+      shell: bash
+      run: xargs -I {} docker tag ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:${{ github.sha }} ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:{} <<< "${{ inputs.tags }}"
+
+    - name: Tag Image as Latest
+      if: ${{ inputs.tag-latest != 'false' }}
+      shell: bash
+      run: docker tag ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:${{ github.sha }} ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:latest
+
+    - name: Push All Tags
+      if: ${{ inputs.push-to-registry != 'false' && inputs.tags != '' }}
+      shell: bash
+      run: xargs -I {} docker push ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:{} <<< "${{ inputs.tags }}"
+
+    - name: Push ${{ inputs.image-name }}:latest
+      if: ${{ inputs.push-to-registry != 'false' && inputs.tag-latest != 'false' }}
+      shell: bash
+      run: docker push ghcr.io/${{ inputs.organization }}/${{ inputs.image-name }}:latest

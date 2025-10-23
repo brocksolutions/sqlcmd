@@ -34,7 +34,7 @@ jobs:
           tar -xjvf sqlcmd-linux-amd64.tar.bz2
 
       - name: "Build and Publish brocksolutions/sqlcmd:${{ steps.version.outputs.sqlcmd }}"
-        uses: brocksolutions/action-build-container@v3
+        uses: ./.github/actions/action-build-container/  
         with:
           dockerfile-path: Dockerfile
           image-name: sqlcmd
