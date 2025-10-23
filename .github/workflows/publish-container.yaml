@@ -36,8 +36,10 @@ jobs:
       - name: "Build and Publish brocksolutions/sqlcmd:${{ steps.version.outputs.sqlcmd }}"
         uses: ./.github/actions/action-build-container/  
         with:
-          dockerfile-path: Dockerfile
           image-name: sqlcmd
-          version: ${{ steps.version.outputs.sqlcmd }}
+          dockerfile-path: Dockerfile
+          tags: |
+              ${{ steps.version.outputs.sqlcmd }}
           tag-latest: true
           push-to-registry: true
+          use-ghas: true
